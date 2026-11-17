@@ -2,6 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import { createLookups } from "./db.js";
 import { boundaryOf, parseMultipart, rewriteRequest } from "./params.js";
+import { pruneTreeAnswer } from "./prune.js";
 import { decide, isEnforced } from "./policy.js";
 import { SessionStore, classifyLogin, cookiePairs, setCookiePairs } from "./sessions.js";
 import { WORKSPACE_ROOTS } from "./uri.js";
@@ -98,6 +99,63 @@ function forward(req, res, { path, query, body }, onResponse, capture = null) {
     res.end("TAO is not reachable right now.");
   });
   if (body && body.length) upstream.write(body);
+  upstream.end();
+}
+
+// Like forward, but the answer is a tree listing: hold it, remove what the expert does not own, and send the rest.
+function forwardFiltered(req, res, request, decisionPrune, identity, onResponse) {
+  const headers = {};
+  for (const [name, value] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(name)) headers[name] = value;
+  headers["accept-encoding"] = "identity"; // the answer has to be readable to be filtered
+  headers.host = req.headers.host || config.publicHost;
+  delete headers["content-length"];
+
+  const transport = config.upstreamTls ? https : http;
+  const upstream = transport.request(
+    {
+      host: config.upstreamHost,
+      port: config.upstreamPort,
+      method: req.method,
+      path: request.query ? `${request.path}?${request.query}` : request.path,
+      headers,
+      servername: config.publicHost,
+      rejectUnauthorized: false,
+      timeout: 300_000,
+    },
+    (upstreamRes) => {
+      onResponse?.(upstreamRes);
+      const chunks = [];
+      upstreamRes.on("data", (chunk) => chunks.push(chunk));
+      upstreamRes.on("end", async () => {
+        const out = {};
+        for (const [name, value] of Object.entries(upstreamRes.headers)) if (!HOP_BY_HOP.has(name)) out[name] = value;
+        let payload = Buffer.concat(chunks);
+        try {
+          if ((upstreamRes.statusCode ?? 0) === 200 && /json/i.test(String(upstreamRes.headers["content-type"] ?? ""))) {
+            const above = new Set(await lookups.pathToWorkspace(identity.expertId, decisionPrune.tree));
+            const keep = async (uri) => above.has(uri) || (await lookups.isOwned(uri, identity.expertId));
+            const json = JSON.parse(payload.toString("utf8"));
+            payload = Buffer.from(JSON.stringify(await pruneTreeAnswer(json, { keep, rootUri: decisionPrune.rootUri })), "utf8");
+          }
+        } catch (error) {
+          // Never hand an expert an unfiltered tree because filtering failed.
+          log({ event: "filter_error", path: request.path, error: String(error?.message ?? error) });
+          res.writeHead(502, { "content-type": "application/json" });
+          res.end(JSON.stringify({ success: false, message: "Could not load your workspace." }));
+          return;
+        }
+        out["content-length"] = String(payload.length);
+        res.writeHead(upstreamRes.statusCode ?? 502, out);
+        res.end(payload);
+      });
+    }
+  );
+  upstream.on("timeout", () => upstream.destroy(new Error("upstream timeout")));
+  upstream.on("error", (error) => {
+    log({ event: "upstream_error", path: request.path, error: String(error.message) });
+    if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" });
+    res.end("TAO is not reachable right now.");
+  });
   upstream.end();
 }
 
@@ -234,6 +292,10 @@ const server = http.createServer(async (req, res) => {
       : null;
 
   if (!enforced) return forward(req, res, request, noteErrors, capture);
+  // A tree listing: TAO answers normally and the answer is filtered.
+  if (decision.action === "pass" && decision.prune && identity.kind === "expert") {
+    return forwardFiltered(req, res, request, decision.prune, identity, noteErrors);
+  }
   if (decision.action === "deny") return refuse(req, res, decision.reason);
   if (decision.action === "login") {
     res.writeHead(302, { location: "/backoffice/tao/Main/login" });

@@ -80,10 +80,23 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   const uris = urisOf(request);
   if (!uris) return deny("unreadable_body");
 
+  // A tree listing is answered by TAO as usual and then filtered (see prune.js), because asking for a different top
+  // folder changes the shape of the answer and breaks TAO's page.
+  const treeListing = /\/getOntologyData\/?$/.test(path);
+  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : null;
+  let prune = null;
+
   const replacements = [];
   let namesTarget = false;
   for (const uri of uris) {
     const tree = Object.keys(WORKSPACE_ROOTS).find((key) => WORKSPACE_ROOTS[key] === uri);
+    if (tree && treeListing) {
+      const workspace = await lookups.workspaceFor(identity.expertId, tree);
+      if (!workspace) return deny(`no_workspace_${tree}`);
+      prune = { tree, rootUri: uri };
+      namesTarget = true;
+      continue;
+    }
     if (tree) {
       const workspace = await lookups.workspaceFor(identity.expertId, tree);
       if (!workspace) return deny(`no_workspace_${tree}`);
@@ -94,12 +107,19 @@ export async function decide({ request, identity, lookups, localNamespace }) {
     if (BLOCKED_ROOTS.includes(uri)) return deny("area_not_allowed", uri);
     if (!uri.startsWith(localNamespace)) continue; // TAO's own vocabulary (field names, models): not a resource
     if (identity.userUri && uri === identity.userUri) continue; // the expert's own account
-    if (!(await lookups.isOwned(uri, identity.expertId))) return deny("not_owner", uri);
+    if (!(await lookups.isOwned(uri, identity.expertId))) {
+      // The folders above the expert's own may be browsed (listed, filtered), never changed.
+      const above = treeListing && treeName ? await lookups.pathToWorkspace(identity.expertId, treeName) : [];
+      if (!above.includes(uri)) return deny("not_owner", uri);
+      prune = { tree: treeName, rootUri: WORKSPACE_ROOTS[treeName] };
+    }
     namesTarget = true;
   }
 
   if (NEEDS_TARGET.test(path) && !namesTarget) return deny("no_target");
-  return pass(replacements.length ? "own_folder" : "ok", replacements);
+  const decision = pass(replacements.length ? "own_folder" : prune ? "filtered" : "ok", replacements);
+  if (prune) decision.prune = prune;
+  return decision;
 }
 
 // Whether a decision is applied or only logged. Enforcement is switched on for everyone ("*"), for a list of logins

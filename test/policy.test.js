@@ -11,9 +11,12 @@ const MINE = `${NS}iMINE000000000000000000000000`;
 const THEIRS = `${NS}iTHEIRS0000000000000000000000`;
 const MY_USER = `${NS}iUSERME000000000000000000000`;
 
+const SHARED_PARENT = `${NS}iSHAREDPARENT0000000000000000`;
 const lookups = {
   workspaceFor: async (id, tree) => (id === ME ? { tests: MY_TESTS, items: MY_ITEMS }[tree] : null),
   isOwned: async (uri, id) => id === ME && [MINE, MY_TESTS, MY_ITEMS].includes(uri),
+  // the folders above the expert's own: the tests tree has a shared parent, the items tree has none
+  pathToWorkspace: async (id, tree) => (id === ME ? (tree === "tests" ? [TEST_ROOT, SHARED_PARENT, MY_TESTS] : [ITEM_ROOT, MY_ITEMS]) : []),
 };
 const expert = { kind: "expert", login: "tb_x_tao_author", expertId: ME, userUri: MY_USER };
 const q = (params) => new URLSearchParams(params).toString();
@@ -30,12 +33,26 @@ test("an unknown session can reach the login page and nothing else", async () =>
   assert.equal((await ask({ kind: "anonymous" }, "/backoffice/taoTests/Tests/getOntologyData", q({ classUri: TEST_ROOT }))).action, "login");
 });
 
-test("the expert's tree is rooted at their own folder", async () => {
+test("a tree listing is filtered, not re-rooted", async () => {
   const tests = await ask(expert, "/backoffice/taoTests/Tests/getOntologyData", q({ classUri: TEST_ROOT, selected: MINE }));
   assert.equal(tests.action, "pass");
-  assert.deepEqual(tests.replacements, [[TEST_ROOT, MY_TESTS]]);
+  assert.deepEqual(tests.replacements, []);
+  assert.deepEqual(tests.prune, { tree: "tests", rootUri: TEST_ROOT });
   const items = await ask(expert, "/backoffice/taoItems/Items/getOntologyData", q({ classUri: ITEM_ROOT }));
-  assert.deepEqual(items.replacements, [[ITEM_ROOT, MY_ITEMS]]);
+  assert.deepEqual(items.prune, { tree: "items", rootUri: ITEM_ROOT });
+});
+
+test("the folders above the expert's own may be browsed, but not changed", async () => {
+  const browse = await ask(expert, "/backoffice/taoTests/Tests/getOntologyData", q({ classUri: SHARED_PARENT }));
+  assert.equal(browse.action, "pass");
+  assert.equal(browse.prune.tree, "tests");
+  assert.equal((await ask(expert, "/backoffice/taoTests/Tests/editClassLabel", q({ classUri: SHARED_PARENT }))).reason, "not_owner");
+  assert.equal((await ask(expert, "/backoffice/taoTests/Tests/getOntologyData", q({ classUri: THEIRS }))).reason, "not_owner");
+});
+
+test("the question picker inside the test editor still starts at the expert's own items folder", async () => {
+  const picker = await ask(expert, "/backoffice/taoQtiTest/Items/getItemClassChildren", q({ classUri: ITEM_ROOT }));
+  assert.deepEqual(picker.replacements, [[ITEM_ROOT, MY_ITEMS]]);
 });
 
 test("another expert's resource is refused, however it is spelled", async () => {

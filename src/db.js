@@ -79,6 +79,29 @@ export function createLookups({ connectionString, roots }) {
     return found;
   }
 
+  // The folders from the top of a tree down to (and including) the expert's own folder. They are shown so the tree
+  // keeps its shape, but they are not the expert's to open for anything but browsing.
+  async function pathToWorkspace(expertId, tree) {
+    const workspace = await workspaceFor(expertId, tree);
+    if (!workspace) return [];
+    const key = `path:${expertId}:${tree}`;
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const result = await pool.query(
+      `with recursive up(c, depth) as (
+         select $1::text, 0
+         union
+         select s.object, up.depth + 1 from statements s join up on s.subject = up.c
+         where s.predicate = $2 and up.depth < 15
+       )
+       select c from up`,
+      [workspace, SUBCLASS]
+    );
+    const list = result.rows.map((row) => row.c);
+    cache.set(key, list, 60_000);
+    return list;
+  }
+
   // Is this resource the expert's: one of their folders, anything inside them, or something whose label carries their
   // id ("[TB:<id>:…]", how TopBrainer names the tests and deliveries it creates for them).
   async function isOwned(uri, expertId) {
@@ -123,5 +146,5 @@ export function createLookups({ connectionString, roots }) {
     return uri;
   }
 
-  return { workspaceFor, isOwned, userUriFor, close: () => pool.end() };
+  return { workspaceFor, isOwned, pathToWorkspace, userUriFor, close: () => pool.end() };
 }
