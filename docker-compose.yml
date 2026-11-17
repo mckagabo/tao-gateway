@@ -1,0 +1,21 @@
+# The gateway runs next to TAO, on TAO's own Docker network, and is reachable only from this server (127.0.0.1).
+services:
+  tao-gateway:
+    build: .
+    container_name: tao-gateway
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - gateway-data:/data
+    networks:
+      - tao_internal
+
+volumes:
+  gateway-data:
+
+networks:
+  tao_internal:
+    external: true
+    name: tao-ce_tao_internal

@@ -1,0 +1,14 @@
+{
+  "name": "tao-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Keeps each TopBrainer expert inside their own folders in TAO's back office.",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}
