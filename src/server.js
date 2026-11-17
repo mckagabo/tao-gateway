@@ -191,6 +191,11 @@ const server = http.createServer(async (req, res) => {
   // For experts, also note when TAO itself answers with an error: that is how a page ends up missing a tab or a
   // list without the gateway having refused anything.
   const traced = Boolean(identity.login) && config.traceLogins.includes(identity.login);
+  // TAO's pages report their own script errors to this address. For a traced login, keep the message: it says why a
+  // page misbehaves.
+  if (traced && /\/tao\/Log\/log\/?$/.test(path)) {
+    log({ event: "client_error", who: identity.expertId, report: body.toString("utf8").slice(0, 700) });
+  }
   const noteErrors = identity.kind === "expert"
     ? (upstreamRes) => {
         const status = upstreamRes.statusCode ?? 0;
