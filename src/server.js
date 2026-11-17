@@ -164,6 +164,7 @@ const server = http.createServer(async (req, res) => {
     log({
       event: enforced ? decision.action : `would_${decision.action}`,
       reason: decision.reason,
+      detail: decision.detail ?? undefined,
       kind: identity.kind,
       who: identity.expertId ?? identity.kind,
       method: req.method,

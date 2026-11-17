@@ -23,6 +23,8 @@ const EXPERT_ALLOWED = [
   /^\/backoffice\/taoQtiItem\//,
   /^\/backoffice\/taoQtiTestPreviewer\//,
   /^\/backoffice\/taoRevision\//,
+  // Loaders for custom interactions (PCI/PIC) used while editing and previewing questions.
+  /^\/backoffice\/qtiItem(?:Pci|Pic)\//,
 ];
 
 // Never for experts, even inside an allowed area: editing the shared definition of what a test or item is.
@@ -34,7 +36,8 @@ const NEEDS_TARGET = /\/(?:getOntologyData|RestResource|RestClass)\b|\/taoQtiTes
 const EXPERT_EXTENSIONS = new Set(["tao", "taoCe", "taoTests", "taoItems", "taoQtiTest", "taoQtiItem"]);
 
 const pass = (reason = "ok", replacements = []) => ({ action: "pass", reason, replacements });
-const deny = (reason) => ({ action: "deny", reason, replacements: [] });
+// `detail` says which address (or path) caused the refusal, so the log can show it.
+const deny = (reason, detail = null) => ({ action: "deny", reason, detail, replacements: [] });
 
 export function isStatic(path) {
   return STATIC.test(path);
@@ -61,7 +64,7 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   // Learners take exams on addresses that never reach the gateway. Anything else in the back office is not theirs.
   if (identity.kind !== "expert") return deny(`not_for_${identity.kind}`);
 
-  if (!EXPERT_ALLOWED.some((rule) => rule.test(path))) return deny("area_not_allowed");
+  if (!EXPERT_ALLOWED.some((rule) => rule.test(path))) return deny("area_not_allowed", path);
   if (EXPERT_FORBIDDEN.test(path)) return deny("shared_definitions");
   const extension = queryValue(request.query, "ext");
   if (extension && !EXPERT_EXTENSIONS.has(extension)) return deny("area_not_allowed");
@@ -80,10 +83,10 @@ export async function decide({ request, identity, lookups, localNamespace }) {
       namesTarget = true;
       continue;
     }
-    if (BLOCKED_ROOTS.includes(uri)) return deny("area_not_allowed");
+    if (BLOCKED_ROOTS.includes(uri)) return deny("area_not_allowed", uri);
     if (!uri.startsWith(localNamespace)) continue; // TAO's own vocabulary (field names, models): not a resource
     if (identity.userUri && uri === identity.userUri) continue; // the expert's own account
-    if (!(await lookups.isOwned(uri, identity.expertId))) return deny("not_owner");
+    if (!(await lookups.isOwned(uri, identity.expertId))) return deny("not_owner", uri);
     namesTarget = true;
   }
 

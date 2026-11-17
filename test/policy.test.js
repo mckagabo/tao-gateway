@@ -108,3 +108,12 @@ test("enforcement can be off, on for one login, or on for all", () => {
   assert.equal(isEnforced({ mode: "enforce", enforceLogins: ["someone_else"] }, who), false);
   assert.equal(isEnforced({ mode: "enforce", enforceLogins: ["*"] }, { login: null }), true);
 });
+
+test("a refusal says which address caused it", async () => {
+  const refused = await ask(expert, "/backoffice/taoTests/Tests/editTest", q({ uri: THEIRS }));
+  assert.equal(refused.detail, THEIRS);
+});
+
+test("custom interaction loaders are allowed for experts", async () => {
+  assert.equal((await ask(expert, "/backoffice/qtiItemPci/PciLoader/load", "")).action, "pass");
+});
