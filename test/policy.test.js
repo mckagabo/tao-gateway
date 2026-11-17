@@ -117,13 +117,21 @@ test("an upload that can't be read is refused", async () => {
   assert.equal(result.reason, "unreadable_body");
 });
 
-test("enforcement can be off, on for one login, or on for all", () => {
-  const who = { login: "tb_x_tao_author" };
+test("enforcement can be off, on for one login, or on for all experts", () => {
+  const who = { kind: "expert", login: "tb_x_tao_author" };
   assert.equal(isEnforced({ mode: "observe", enforceLogins: ["*"] }, who), false);
   assert.equal(isEnforced({ mode: "enforce", enforceLogins: [] }, who), false);
   assert.equal(isEnforced({ mode: "enforce", enforceLogins: ["tb_x_tao_author"] }, who), true);
   assert.equal(isEnforced({ mode: "enforce", enforceLogins: ["someone_else"] }, who), false);
-  assert.equal(isEnforced({ mode: "enforce", enforceLogins: ["*"] }, { login: null }), true);
+  assert.equal(isEnforced({ mode: "enforce", enforceLogins: ["*"] }, who), true);
+});
+
+test("learners, the app and unknown requests are never confined, even when everyone is enforced", () => {
+  const all = { mode: "enforce", enforceLogins: ["*"] };
+  assert.equal(isEnforced(all, { kind: "learner", login: "tb_l_tao_learner" }), false);
+  assert.equal(isEnforced(all, { kind: "admin", login: "taoAdmin" }), false);
+  assert.equal(isEnforced(all, { kind: "anonymous", login: null }), false);
+  assert.equal(isEnforced(all, { kind: "other", login: "x" }), false);
 });
 
 test("a refusal says which address caused it", async () => {

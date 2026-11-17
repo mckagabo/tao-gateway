@@ -91,3 +91,19 @@ export function classifyLogin(login, adminLogins = ["taoAdmin"]) {
   if (/^tb_.+_tao_(learner|[A-Za-z0-9_-]{10})$/.test(login)) return { kind: "learner", login };
   return { kind: "other", login };
 }
+
+// The app calls TAO's REST interfaces with the admin's username and password in the request (HTTP Basic), not with a
+// browser cookie. If the request names an admin account that way it is treated as that admin: TAO checks the password
+// itself, so nothing is granted that TAO would not grant. Any other Basic login is not trusted here.
+export function adminFromBasicAuth(header, adminLogins = ["taoAdmin"]) {
+  const match = /^Basic\s+([A-Za-z0-9+/=]+)$/.exec(String(header ?? ""));
+  if (!match) return null;
+  let decoded;
+  try {
+    decoded = Buffer.from(match[1], "base64").toString("utf8");
+  } catch {
+    return null;
+  }
+  const login = decoded.split(":")[0];
+  return adminLogins.includes(login) ? login : null;
+}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SessionStore, classifyLogin, cookiePairs, setCookiePairs } from "../src/sessions.js";
+import { SessionStore, adminFromBasicAuth, classifyLogin, cookiePairs, setCookiePairs } from "../src/sessions.js";
 
 test("logins are recognised by how TopBrainer names them", () => {
   assert.deepEqual(classifyLogin("taoAdmin"), { kind: "admin", login: "taoAdmin" });
@@ -30,4 +30,13 @@ test("a session is remembered by its cookies and forgotten on logout or expiry",
 
 test("cookies being deleted are not taken for a session", () => {
   assert.deepEqual(setCookiePairs(["a=deleted; expires=x", "b=; path=/", "c=ok"]), ["c=ok"]);
+});
+
+test("the app's admin calls (HTTP Basic) are recognised, other Basic logins are not", () => {
+  const basic = (login, password) => "Basic " + Buffer.from(`${login}:${password}`).toString("base64");
+  assert.equal(adminFromBasicAuth(basic("taoAdmin", "secret")), "taoAdmin");
+  assert.equal(adminFromBasicAuth(basic("tb_e0e82a24_6820_4d34_9d98_e5c8d9108b4c_tao_author", "x")), null);
+  assert.equal(adminFromBasicAuth(basic("taoAdminish", "x")), null);
+  assert.equal(adminFromBasicAuth(undefined), null);
+  assert.equal(adminFromBasicAuth("Bearer abc"), null);
 });

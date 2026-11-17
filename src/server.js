@@ -4,7 +4,7 @@ import { createLookups } from "./db.js";
 import { boundaryOf, parseMultipart, rewriteRequest } from "./params.js";
 import { pruneTreeAnswer } from "./prune.js";
 import { decide, isEnforced } from "./policy.js";
-import { SessionStore, classifyLogin, cookiePairs, setCookiePairs } from "./sessions.js";
+import { SessionStore, adminFromBasicAuth, classifyLogin, cookiePairs, setCookiePairs } from "./sessions.js";
 import { WORKSPACE_ROOTS } from "./uri.js";
 
 // The gateway itself: sits between nginx and TAO for the back office. For each request it works out who is asking,
@@ -216,7 +216,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const identity = classifyLogin(sessions.find(req.headers.cookie), config.adminLogins);
+  // A browser session (cookie), or the app calling TAO's REST API as an admin (HTTP Basic).
+  const identity = classifyLogin(sessions.find(req.headers.cookie) ?? adminFromBasicAuth(req.headers.authorization, config.adminLogins), config.adminLogins);
   let decision;
   try {
     if (identity.kind === "expert") identity.userUri = await lookups.userUriFor(identity.login);

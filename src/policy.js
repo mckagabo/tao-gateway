@@ -125,10 +125,12 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   return decision;
 }
 
-// Whether a decision is applied or only logged. Enforcement is switched on for everyone ("*"), for a list of logins
-// (a trial on one expert), or not at all.
+// Whether a decision is applied or only logged. Only experts are ever confined: learners taking exams, the app's own
+// calls and requests from nobody in particular are TAO's business, and holding them to expert rules would break exams.
+// Within experts, enforcement is switched on for everyone ("*"), for a list of logins (a trial), or not at all.
 export function isEnforced({ mode, enforceLogins }, identity) {
   if (mode !== "enforce") return false;
+  if (identity.kind !== "expert") return false;
   if (enforceLogins.includes("*")) return true;
   return Boolean(identity.login) && enforceLogins.includes(identity.login);
 }
