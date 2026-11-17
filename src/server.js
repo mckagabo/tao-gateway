@@ -1,7 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import { createLookups } from "./db.js";
-import { rewriteRequest } from "./params.js";
+import { boundaryOf, parseMultipart, rewriteRequest } from "./params.js";
 import { decide, isEnforced } from "./policy.js";
 import { SessionStore, classifyLogin, cookiePairs, setCookiePairs } from "./sessions.js";
 import { WORKSPACE_ROOTS } from "./uri.js";
@@ -21,6 +21,8 @@ const config = {
   publicHost: env.PUBLIC_HOST || "assessment.topbrainer.com",
   mode: env.MODE === "enforce" ? "enforce" : "observe",
   enforceLogins: list(env.ENFORCE_LOGINS, ""),
+  // Logins whose every request is traced (method, path, TAO's answer). For finding why a page misbehaves.
+  traceLogins: list(env.TRACE_LOGINS, ""),
   adminLogins: list(env.ADMIN_LOGINS, "taoAdmin"),
   localNamespace: env.LOCAL_NAMESPACE || "https://communityedition.tao/ontologies/tao.rdf#",
   sessionFile: env.SESSION_FILE || "/data/sessions.json",
@@ -158,6 +160,20 @@ const server = http.createServer(async (req, res) => {
     decision = { action: "deny", reason: "gateway_error", replacements: [] };
   }
 
+  // Import forms: note the names of the fields they send (names only, never their content), so the rules can be
+  // taught where an import's questions go when the expert leaves the destination empty.
+  if (identity.kind === "expert" && /Import\//.test(path) && req.method === "POST") {
+    try {
+      const boundary = boundaryOf(request.contentType);
+      const parts = boundary ? parseMultipart(body, boundary) : null;
+      const names = parts?.map((part) => (/name="([^"]*)"/.exec(part.headers)?.[1] ?? "?") + (part.isFile ? "(file)" : ""));
+      const query = Object.fromEntries([...new URLSearchParams(query).keys()].map((key) => [key, 1]));
+      log({ event: "import_fields", path, fields: names ?? null, queryKeys: Object.keys(query) });
+    } catch {
+      /* logging only */
+    }
+  }
+
   const enforced = isEnforced(config, identity);
   const notable = decision.action !== "pass" || decision.replacements.length > 0;
   if (notable) {
@@ -174,10 +190,24 @@ const server = http.createServer(async (req, res) => {
 
   // For experts, also note when TAO itself answers with an error: that is how a page ends up missing a tab or a
   // list without the gateway having refused anything.
+  const traced = Boolean(identity.login) && config.traceLogins.includes(identity.login);
   const noteErrors = identity.kind === "expert"
     ? (upstreamRes) => {
-        if ((upstreamRes.statusCode ?? 0) >= 400) {
-          log({ event: "upstream_status", status: upstreamRes.statusCode, who: identity.expertId, method: req.method, path });
+        const status = upstreamRes.statusCode ?? 0;
+        if (traced) {
+          log({
+            event: "trace",
+            who: identity.expertId,
+            method: req.method,
+            path,
+            status,
+            bytes: upstreamRes.headers["content-length"] ?? null,
+            type: String(upstreamRes.headers["content-type"] ?? "").split(";")[0],
+            decision: decision.action,
+            enforced,
+          });
+        } else if (status >= 400) {
+          log({ event: "upstream_status", status, who: identity.expertId, method: req.method, path });
         }
       }
     : undefined;
