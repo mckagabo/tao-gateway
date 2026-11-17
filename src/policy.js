@@ -12,7 +12,10 @@ const PUBLIC = [/^\/backoffice\/?$/, /^\/backoffice\/tao\/Main\/(?:login|logout|
 
 // The parts of the back office an expert may use: the shell, their background tasks, tests and items.
 const EXPERT_ALLOWED = [
-  /^\/backoffice\/tao\/Main\//,
+  // TAO's own shared helpers (language list, error reporting, file upload, background tasks, locks, the page shell...)
+  // are allowed as a whole, except the ones that list or manage people and settings. Anything that names a test, item or
+  // folder is still checked for ownership, whatever address it comes through.
+  /^\/backoffice\/tao\/(?!Users\b|Roles\b|Search\b|ExtensionsManager\b|Settings\b|Notification\b)/,
   /^\/backoffice\/taoCe\/(?:Main|Home)\//,
   /^\/backoffice\/tao\/ClientConfig\//,
   /^\/backoffice\/tao\/TaskQueueWebApi\//,

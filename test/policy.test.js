@@ -144,3 +144,13 @@ test("uploads and file serving are allowed, and task status skips the ownership 
 test("TAO's own error reporting is allowed for experts", async () => {
   assert.equal((await ask(expert, "/backoffice/tao/Log/log", "", { method: "POST" })).action, "pass");
 });
+
+test("TAO's shared helpers are open to experts, but the ones that manage people and settings are not", async () => {
+  assert.equal((await ask(expert, "/backoffice/tao/Languages/index")).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/tao/Lock/create", q({ id: MINE }))).action, "pass");
+  for (const path of ["/backoffice/tao/Users/index", "/backoffice/tao/Roles/index", "/backoffice/tao/Search/search", "/backoffice/tao/ExtensionsManager/index", "/backoffice/tao/Settings/index"]) {
+    assert.equal((await ask(expert, path)).reason, "area_not_allowed", path);
+  }
+  // an open helper still cannot be used on someone else's resource
+  assert.equal((await ask(expert, "/backoffice/tao/Lock/create", q({ id: THEIRS }))).reason, "not_owner");
+});
