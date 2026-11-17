@@ -123,3 +123,7 @@ test("uploads and file serving are allowed, and task status skips the ownership 
   assert.equal((await ask(expert, "/backoffice/tao/getFileFlysystem.php/abc/1/xyz/a/e/3/hash/*/en-US/clip.mp3")).action, "pass");
   assert.equal((await ask(expert, "/backoffice/tao/TaskQueueWebApi/get", q({ taskId: `${NS}iTASK0000000000000000000000000` }))).action, "pass");
 });
+
+test("TAO's own error reporting is allowed for experts", async () => {
+  assert.equal((await ask(expert, "/backoffice/tao/Log/log", "", { method: "POST" })).action, "pass");
+});

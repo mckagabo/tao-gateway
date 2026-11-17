@@ -18,6 +18,8 @@ const EXPERT_ALLOWED = [
   /^\/backoffice\/tao\/TaskQueueWebApi\//,
   /^\/backoffice\/tao\/(?:RestResource|RestClass|Lock)\//,
   // Uploading files (item and media import) and serving them back (audio, images): their addresses are file keys.
+  // TAO's pages report their own script errors here; refusing it shows experts a false "logged out" message.
+  /^\/backoffice\/tao\/Log\//,
   /^\/backoffice\/tao\/File\//,
   /^\/backoffice\/tao\/getFileFlysystem\.php\//,
   /^\/backoffice\/taoTests\//,
