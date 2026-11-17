@@ -17,6 +17,9 @@ const EXPERT_ALLOWED = [
   /^\/backoffice\/tao\/ClientConfig\//,
   /^\/backoffice\/tao\/TaskQueueWebApi\//,
   /^\/backoffice\/tao\/(?:RestResource|RestClass|Lock)\//,
+  // Uploading files (item and media import) and serving them back (audio, images): their addresses are file keys.
+  /^\/backoffice\/tao\/File\//,
+  /^\/backoffice\/tao\/getFileFlysystem\.php\//,
   /^\/backoffice\/taoTests\//,
   /^\/backoffice\/taoItems\//,
   /^\/backoffice\/taoQtiTest\//,
@@ -68,6 +71,9 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   if (EXPERT_FORBIDDEN.test(path)) return deny("shared_definitions");
   const extension = queryValue(request.query, "ext");
   if (extension && !EXPERT_EXTENSIONS.has(extension)) return deny("area_not_allowed");
+
+  // Background-task status (import progress and the like): the task ids are not content an expert owns.
+  if (/^\/backoffice\/tao\/TaskQueueWebApi\//.test(path)) return pass("task_status");
 
   const uris = urisOf(request);
   if (!uris) return deny("unreadable_body");

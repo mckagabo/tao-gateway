@@ -117,3 +117,9 @@ test("a refusal says which address caused it", async () => {
 test("custom interaction loaders are allowed for experts", async () => {
   assert.equal((await ask(expert, "/backoffice/qtiItemPci/PciLoader/load", "")).action, "pass");
 });
+
+test("uploads and file serving are allowed, and task status skips the ownership check", async () => {
+  assert.equal((await ask(expert, "/backoffice/tao/File/upload", "", { method: "POST" })).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/tao/getFileFlysystem.php/abc/1/xyz/a/e/3/hash/*/en-US/clip.mp3")).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/tao/TaskQueueWebApi/get", q({ taskId: `${NS}iTASK0000000000000000000000000` }))).action, "pass");
+});
