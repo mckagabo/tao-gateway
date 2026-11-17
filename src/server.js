@@ -172,14 +172,24 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  if (!enforced) return forward(req, res, request);
+  // For experts, also note when TAO itself answers with an error: that is how a page ends up missing a tab or a
+  // list without the gateway having refused anything.
+  const noteErrors = identity.kind === "expert"
+    ? (upstreamRes) => {
+        if ((upstreamRes.statusCode ?? 0) >= 400) {
+          log({ event: "upstream_status", status: upstreamRes.statusCode, who: identity.expertId, method: req.method, path });
+        }
+      }
+    : undefined;
+
+  if (!enforced) return forward(req, res, request, noteErrors);
   if (decision.action === "deny") return refuse(req, res, decision.reason);
   if (decision.action === "login") {
     res.writeHead(302, { location: "/backoffice/tao/Main/login" });
     res.end();
     return;
   }
-  forward(req, res, decision.replacements.length ? rewriteRequest(request, decision.replacements) : request);
+  forward(req, res, decision.replacements.length ? rewriteRequest(request, decision.replacements) : request, noteErrors);
 });
 
 server.listen(config.port, () => log({ event: "started", port: config.port, mode: config.mode, enforceLogins: config.enforceLogins }));
