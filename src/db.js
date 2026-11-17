@@ -66,8 +66,12 @@ export function createLookups({ connectionString, roots }) {
            select up.ws, s.object, up.depth + 1 from statements s join up on s.subject = up.c
            where s.predicate = $2 and up.depth < 15
          )
-         select ws from up where c = $3 limit 1`,
-        [candidates, SUBCLASS, root]
+         select up.ws from up where c = $3
+         group by up.ws
+         -- If an expert somehow has two folders in this tree, show the one that holds the most (then the oldest).
+         order by (select count(*) from statements t where t.predicate = $4 and t.object = up.ws) desc, up.ws asc
+         limit 1`,
+        [candidates, SUBCLASS, root, TYPE]
       );
       found = result.rows[0]?.ws ?? null;
     }

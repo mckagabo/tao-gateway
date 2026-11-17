@@ -55,9 +55,11 @@ function readBody(req, limit) {
   });
 }
 
-function forward(req, res, { path, query, body }, onResponse) {
+function forward(req, res, { path, query, body }, onResponse, capture = null) {
   const headers = {};
   for (const [name, value] of Object.entries(req.headers)) if (!HOP_BY_HOP.has(name)) headers[name] = value;
+  // To read an answer in the log it must not be compressed.
+  if (capture) headers["accept-encoding"] = "identity";
   headers.host = req.headers.host || config.publicHost;
   if (body && body.length) headers["content-length"] = String(body.length);
   else delete headers["content-length"];
@@ -79,6 +81,13 @@ function forward(req, res, { path, query, body }, onResponse) {
       const out = {};
       for (const [name, value] of Object.entries(upstreamRes.headers)) if (!HOP_BY_HOP.has(name)) out[name] = value;
       res.writeHead(upstreamRes.statusCode ?? 502, out);
+      if (capture) {
+        let text = "";
+        upstreamRes.on("data", (chunk) => {
+          if (text.length < capture.limit) text += chunk.toString("utf8");
+        });
+        upstreamRes.on("end", () => capture.done(text.slice(0, capture.limit)));
+      }
       upstreamRes.pipe(res);
     }
   );
@@ -217,14 +226,21 @@ const server = http.createServer(async (req, res) => {
       }
     : undefined;
 
-  if (!enforced) return forward(req, res, request, noteErrors);
+  // For a traced login, keep the start of the tree answers: the shape of the top of the tree is what the page's
+  // script depends on.
+  const capture =
+    traced && /getOntologyData/.test(path)
+      ? { limit: 3000, done: (text) => log({ event: "trace_body", who: identity.expertId, path, body: text }) }
+      : null;
+
+  if (!enforced) return forward(req, res, request, noteErrors, capture);
   if (decision.action === "deny") return refuse(req, res, decision.reason);
   if (decision.action === "login") {
     res.writeHead(302, { location: "/backoffice/tao/Main/login" });
     res.end();
     return;
   }
-  forward(req, res, decision.replacements.length ? rewriteRequest(request, decision.replacements) : request, noteErrors);
+  forward(req, res, decision.replacements.length ? rewriteRequest(request, decision.replacements) : request, noteErrors, capture);
 });
 
 server.listen(config.port, () => log({ event: "started", port: config.port, mode: config.mode, enforceLogins: config.enforceLogins }));
