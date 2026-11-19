@@ -34,6 +34,9 @@ const EXPERT_ALLOWED = [
   // Results of the expert's own deliveries (read and export only, see RESULTS_READ_ONLY): which deliveries and which
   // results are theirs is decided like everything else, by ownership.
   /^\/backoffice\/taoOutcomeUi\//,
+  // The Results tree is listed through the deliveries controller. Only that listing is open, filtered to the expert's own
+  // deliveries; creating, editing or publishing deliveries stays closed.
+  /^\/backoffice\/taoDeliveryRdf\/DeliveryMgmt\/getOntologyData\/?$/,
   // Loaders for custom interactions (PCI/PIC) used while editing and previewing questions.
   /^\/backoffice\/qtiItem(?:Pci|Pic)\//,
 ];
@@ -93,7 +96,7 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   // A tree listing is answered by TAO as usual and then filtered (see prune.js), because asking for a different top
   // folder changes the shape of the answer and breaks TAO's page.
   const treeListing = /\/getOntologyData\/?$/.test(path);
-  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : /\/taoOutcomeUi\//.test(path) ? "results" : null;
+  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : /\/taoOutcomeUi\/|\/taoDeliveryRdf\/DeliveryMgmt\/getOntologyData/.test(path) ? "results" : null;
   let prune = null;
 
   const replacements = [];

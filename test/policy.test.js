@@ -109,6 +109,13 @@ test("results: the page opens, the delivery tree is filtered, and only the exper
   }
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: MY_DELIVERY }))).action, "pass");
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/viewResult", q({ id: MY_RESULT, classUri: MY_DELIVERY }))).action, "pass");
+  // TAO lists the Results tree through the deliveries controller: that one listing is open and filtered
+  const viaDeliveries = await ask(expert, "/backoffice/taoDeliveryRdf/DeliveryMgmt/getOntologyData", q({ classUri: RESULT_TREE_ROOTS[0] }));
+  assert.equal(viaDeliveries.action, "pass");
+  assert.deepEqual(viaDeliveries.prune, { tree: "results", rootUri: RESULT_TREE_ROOTS[0] });
+  assert.equal((await ask(expert, "/backoffice/taoDeliveryRdf/DeliveryMgmt/getOntologyData", q({ classUri: THEIRS }))).reason, "not_owner");
+  assert.equal((await ask(expert, "/backoffice/taoDeliveryRdf/DeliveryMgmt/getOntologyData", "limit=30")).reason, "no_target");
+  assert.equal((await ask(expert, "/backoffice/taoDeliveryRdf/DeliveryMgmt/editDelivery", q({ uri: MY_DELIVERY }))).reason, "area_not_allowed");
   // someone else's delivery, or someone else's result named under the expert's own delivery
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: THEIRS }))).reason, "not_owner");
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/viewResult", q({ id: THEIRS, classUri: MY_DELIVERY }))).reason, "not_owner");
