@@ -5,12 +5,14 @@
 
 export const TEST_ROOT = "http://www.tao.lu/Ontologies/TAOTest.rdf#Test";
 export const ITEM_ROOT = "http://www.tao.lu/Ontologies/TAOItem.rdf#Item";
+export const MEDIA_ROOT = "http://www.tao.lu/Ontologies/TAOMedia.rdf#Media";
 
 // The top folder of each tree an expert may work in. A request for one of these is answered with the expert's own
 // folder in that tree instead.
-export const WORKSPACE_ROOTS = { tests: TEST_ROOT, items: ITEM_ROOT };
+export const WORKSPACE_ROOTS = { tests: TEST_ROOT, items: ITEM_ROOT, media: MEDIA_ROOT };
 
-// Top folders of the trees experts get no access to at all (deliveries, results, assets, people).
+// Top folders of the trees experts get no access to at all (deliveries, assets' shared top folder, people). The Media
+// root stays listed here for safety, but it is a workspace root above, which is checked first.
 export const BLOCKED_ROOTS = [
   "http://www.tao.lu/Ontologies/TAODelivery.rdf#AssembledDelivery",
   "http://www.tao.lu/Ontologies/TAOResult.rdf#DeliveryResult",

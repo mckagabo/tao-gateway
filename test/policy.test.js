@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { decide, isEnforced } from "../src/policy.js";
-import { ITEM_ROOT, RESULT_TREE_ROOTS, TEST_ROOT, encodeTaoUri } from "../src/uri.js";
+import { ITEM_ROOT, MEDIA_ROOT, RESULT_TREE_ROOTS, TEST_ROOT, encodeTaoUri } from "../src/uri.js";
 
 const NS = "https://communityedition.tao/ontologies/tao.rdf#";
 const ME = "e0e82a24-6820-4d34-9d98-e5c8d9108b4c";
@@ -9,16 +9,19 @@ const MY_TESTS = `${NS}iMYTESTS00000000000000000000`;
 const MY_ITEMS = `${NS}iMYITEMS00000000000000000000`;
 const MINE = `${NS}iMINE000000000000000000000000`;
 const THEIRS = `${NS}iTHEIRS0000000000000000000000`;
+const MY_MEDIA = `${NS}iMYMEDIA000000000000000000000`;
+const MY_ASSET = `${NS}iMYASSET00000000000000000000`;
 const MY_DELIVERY = `${NS}iMYDELIVERY000000000000000000`;
 const MY_RESULT = `${NS}iMYRESULT00000000000000000000`;
 const MY_USER = `${NS}iUSERME000000000000000000000`;
 
 const SHARED_PARENT = `${NS}iSHAREDPARENT0000000000000000`;
 const lookups = {
-  workspaceFor: async (id, tree) => (id === ME ? { tests: MY_TESTS, items: MY_ITEMS }[tree] : null),
-  isOwned: async (uri, id) => id === ME && [MINE, MY_TESTS, MY_ITEMS, MY_DELIVERY, MY_RESULT].includes(uri),
+  workspaceFor: async (id, tree) => (id === ME ? { tests: MY_TESTS, items: MY_ITEMS, media: MY_MEDIA }[tree] : null),
+  isOwned: async (uri, id) => id === ME && [MINE, MY_TESTS, MY_ITEMS, MY_MEDIA, MY_ASSET, MY_DELIVERY, MY_RESULT].includes(uri),
   // the folders above the expert's own: the tests tree has a shared parent, the items tree has none
-  pathToWorkspace: async (id, tree) => (id === ME ? (tree === "tests" ? [TEST_ROOT, SHARED_PARENT, MY_TESTS] : [ITEM_ROOT, MY_ITEMS]) : []),
+  pathToWorkspace: async (id, tree) =>
+    id === ME ? (tree === "tests" ? [TEST_ROOT, SHARED_PARENT, MY_TESTS] : tree === "media" ? [MEDIA_ROOT, MY_MEDIA] : [ITEM_ROOT, MY_ITEMS]) : [],
 };
 const expert = { kind: "expert", login: "tb_x_tao_author", expertId: ME, userUri: MY_USER };
 const q = (params) => new URLSearchParams(params).toString();
@@ -87,7 +90,6 @@ test("a listing with no folder named would list everything, so it is refused", a
 test("results, deliveries, assets, people and search are closed to experts", async () => {
   for (const path of [
     "/backoffice/taoDeliveryRdf/DeliveryMgmt/editDelivery",
-    "/backoffice/taoMediaManager/MediaManager/getOntologyData",
     "/backoffice/tao/Users/index",
     "/backoffice/taoTestTaker/TestTaker/index",
     "/backoffice/tao/Search/search",
@@ -97,6 +99,24 @@ test("results, deliveries, assets, people and search are closed to experts", asy
   }
   assert.equal((await ask(expert, "/backoffice/tao/Main/index", q({ structure: "deliveries", ext: "taoDeliveryRdf" }))).reason, "area_not_allowed");
   assert.equal((await ask(expert, "/backoffice/taoTests/Tests/editClassProperties", q({ id: MY_TESTS }))).reason, "shared_definitions");
+});
+
+test("assets: the tree is filtered to the expert's own folder, and only their own assets pass", async () => {
+  assert.equal((await ask(expert, "/backoffice/tao/Main/index", q({ structure: "taoMediaManager", ext: "taoMediaManager" }))).action, "pass");
+  const tree = await ask(expert, "/backoffice/taoMediaManager/MediaManager/getOntologyData", q({ classUri: MEDIA_ROOT }));
+  assert.equal(tree.action, "pass");
+  assert.deepEqual(tree.prune, { tree: "media", rootUri: MEDIA_ROOT });
+  // an upload with no destination chosen, or the top folder named, lands in the expert's own folder
+  const upload = await ask(expert, "/backoffice/taoMediaManager/MediaImport/index", q({ classUri: MEDIA_ROOT }));
+  assert.deepEqual(upload.replacements, [[MEDIA_ROOT, MY_MEDIA]]);
+  assert.equal((await ask(expert, "/backoffice/taoMediaManager/MediaManager/editInstance", q({ uri: MY_ASSET }))).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/taoMediaManager/MediaManager/editInstance", q({ uri: THEIRS }))).reason, "not_owner");
+  assert.equal((await ask(expert, "/backoffice/taoMediaManager/MediaManager/getOntologyData", q({ classUri: THEIRS }))).reason, "not_owner");
+});
+
+test("an expert whose assets folder doesn't exist yet sees nothing rather than everything", async () => {
+  const stranger = { kind: "expert", login: "tb_y_tao_author", expertId: "00000000-0000-4000-8000-000000000000" };
+  assert.equal((await ask(stranger, "/backoffice/taoMediaManager/MediaManager/getOntologyData", q({ classUri: MEDIA_ROOT }))).reason, "no_workspace_media");
 });
 
 test("results: the page opens, the delivery tree is filtered, and only the expert's own deliveries and results pass", async () => {

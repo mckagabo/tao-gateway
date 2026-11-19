@@ -15,7 +15,7 @@ It sits between nginx and TAO for the back office only. Exam taking never passes
 
 ## How ownership is decided
 
-- An expert's folders are the ones whose label carries `[TB-AUTHOR:<their TopBrainer id>]`, one per tree (Tests, Items).
+- An expert's folders are the ones whose label carries `[TB-AUTHOR:<their TopBrainer id>]`, one per tree (Tests, Items, Assets).
 - A resource is theirs if it is inside one of those folders, or its label carries `[TB:<their id>:…]`.
 - Everything else belongs to admin only.
 

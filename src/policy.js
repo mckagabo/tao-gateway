@@ -34,6 +34,8 @@ const EXPERT_ALLOWED = [
   // Results of the expert's own deliveries (read and export only, see RESULTS_READ_ONLY): which deliveries and which
   // results are theirs is decided like everything else, by ownership.
   /^\/backoffice\/taoOutcomeUi\//,
+  // Assets (images, audio, video): the expert's own folder in the Assets tree, like tests and items.
+  /^\/backoffice\/taoMediaManager\//,
   // The Results tree is listed through the deliveries controller. Only that listing is open, filtered to the expert's own
   // deliveries; creating, editing or publishing deliveries stays closed.
   /^\/backoffice\/taoDeliveryRdf\/DeliveryMgmt\/getOntologyData\/?$/,
@@ -50,7 +52,7 @@ const NEEDS_TARGET = /\/(?:getOntologyData|RestResource|RestClass)\b|\/taoQtiTes
 // Results are viewed and exported, never deleted from here: they feed TopBrainer's own marking and scores.
 const RESULTS_READ_ONLY = /\/taoOutcomeUi\/.*(?:delete|remove|purge)/i;
 
-const EXPERT_EXTENSIONS = new Set(["tao", "taoCe", "taoTests", "taoItems", "taoQtiTest", "taoQtiItem", "taoOutcomeUi"]);
+const EXPERT_EXTENSIONS = new Set(["tao", "taoCe", "taoTests", "taoItems", "taoQtiTest", "taoQtiItem", "taoOutcomeUi", "taoMediaManager"]);
 
 const pass = (reason = "ok", replacements = []) => ({ action: "pass", reason, replacements });
 // `detail` says which address (or path) caused the refusal, so the log can show it.
@@ -96,7 +98,7 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   // A tree listing is answered by TAO as usual and then filtered (see prune.js), because asking for a different top
   // folder changes the shape of the answer and breaks TAO's page.
   const treeListing = /\/getOntologyData\/?$/.test(path);
-  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : /\/taoOutcomeUi\/|\/taoDeliveryRdf\/DeliveryMgmt\/getOntologyData/.test(path) ? "results" : null;
+  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : /\/taoMediaManager\//.test(path) ? "media" : /\/taoOutcomeUi\/|\/taoDeliveryRdf\/DeliveryMgmt\/getOntologyData/.test(path) ? "results" : null;
   let prune = null;
 
   const replacements = [];
