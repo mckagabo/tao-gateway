@@ -104,13 +104,8 @@ export function createLookups({ connectionString, roots }) {
 
   // Is this resource the expert's: one of their folders, anything inside them, or something whose label carries their
   // id ("[TB:<id>:…]", how TopBrainer names the tests and deliveries it creates for them).
-  async function isOwned(uri, expertId) {
-    if (!UUID.test(expertId)) return false;
-    const key = `own:${expertId}:${uri}`;
-    const cached = cache.get(key);
-    if (cached !== undefined) return cached;
+  async function ownedDirectly(uri, expertId) {
     const workspaces = await workspacesOf(expertId);
-    let owned = false;
     if (workspaces.length) {
       const inside = await pool.query(
         `with recursive up(c, depth) as (
@@ -122,14 +117,35 @@ export function createLookups({ connectionString, roots }) {
          select 1 from up where c = any($4::text[]) limit 1`,
         [uri, TYPE, SUBCLASS, workspaces]
       );
-      owned = inside.rowCount > 0;
+      if (inside.rowCount > 0) return true;
     }
+    const tagged = await pool.query(
+      "select 1 from statements where subject = $1 and predicate = $2 and (object like $3 or object like $4) limit 1",
+      [uri, LABEL, `%[TB:${expertId}:%`, `%[TB:${expertId}]%`]
+    );
+    return tagged.rowCount > 0;
+  }
+
+  // A learner's result belongs to whoever owns the delivery it was taken on. TAO keeps that link in results_storage
+  // (result_id -> delivery). If the table can't be read, or the address is no result, the answer is simply "no".
+  async function deliveryOfResult(uri) {
+    try {
+      const result = await pool.query("select delivery from results_storage where result_id = $1 limit 1", [uri]);
+      return result.rows[0]?.delivery ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function isOwned(uri, expertId) {
+    if (!UUID.test(expertId)) return false;
+    const key = `own:${expertId}:${uri}`;
+    const cached = cache.get(key);
+    if (cached !== undefined) return cached;
+    let owned = await ownedDirectly(uri, expertId);
     if (!owned) {
-      const tagged = await pool.query(
-        "select 1 from statements where subject = $1 and predicate = $2 and (object like $3 or object like $4) limit 1",
-        [uri, LABEL, `%[TB:${expertId}:%`, `%[TB:${expertId}]%`]
-      );
-      owned = tagged.rowCount > 0;
+      const delivery = await deliveryOfResult(uri);
+      if (delivery) owned = await ownedDirectly(delivery, expertId);
     }
     // A "no" is kept only briefly: a resource the expert just created becomes theirs a moment later.
     cache.set(key, owned, owned ? 30_000 : 3_000);

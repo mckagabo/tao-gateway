@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { decide, isEnforced } from "../src/policy.js";
-import { ITEM_ROOT, TEST_ROOT, encodeTaoUri } from "../src/uri.js";
+import { ITEM_ROOT, RESULT_TREE_ROOTS, TEST_ROOT, encodeTaoUri } from "../src/uri.js";
 
 const NS = "https://communityedition.tao/ontologies/tao.rdf#";
 const ME = "e0e82a24-6820-4d34-9d98-e5c8d9108b4c";
@@ -9,12 +9,14 @@ const MY_TESTS = `${NS}iMYTESTS00000000000000000000`;
 const MY_ITEMS = `${NS}iMYITEMS00000000000000000000`;
 const MINE = `${NS}iMINE000000000000000000000000`;
 const THEIRS = `${NS}iTHEIRS0000000000000000000000`;
+const MY_DELIVERY = `${NS}iMYDELIVERY000000000000000000`;
+const MY_RESULT = `${NS}iMYRESULT00000000000000000000`;
 const MY_USER = `${NS}iUSERME000000000000000000000`;
 
 const SHARED_PARENT = `${NS}iSHAREDPARENT0000000000000000`;
 const lookups = {
   workspaceFor: async (id, tree) => (id === ME ? { tests: MY_TESTS, items: MY_ITEMS }[tree] : null),
-  isOwned: async (uri, id) => id === ME && [MINE, MY_TESTS, MY_ITEMS].includes(uri),
+  isOwned: async (uri, id) => id === ME && [MINE, MY_TESTS, MY_ITEMS, MY_DELIVERY, MY_RESULT].includes(uri),
   // the folders above the expert's own: the tests tree has a shared parent, the items tree has none
   pathToWorkspace: async (id, tree) => (id === ME ? (tree === "tests" ? [TEST_ROOT, SHARED_PARENT, MY_TESTS] : [ITEM_ROOT, MY_ITEMS]) : []),
 };
@@ -84,7 +86,6 @@ test("a listing with no folder named would list everything, so it is refused", a
 
 test("results, deliveries, assets, people and search are closed to experts", async () => {
   for (const path of [
-    "/backoffice/taoOutcomeUi/Results/index",
     "/backoffice/taoDeliveryRdf/DeliveryMgmt/editDelivery",
     "/backoffice/taoMediaManager/MediaManager/getOntologyData",
     "/backoffice/tao/Users/index",
@@ -94,8 +95,31 @@ test("results, deliveries, assets, people and search are closed to experts", asy
   ]) {
     assert.equal((await ask(expert, path)).reason, "area_not_allowed", path);
   }
-  assert.equal((await ask(expert, "/backoffice/tao/Main/index", q({ structure: "results", ext: "taoOutcomeUi" }))).reason, "area_not_allowed");
+  assert.equal((await ask(expert, "/backoffice/tao/Main/index", q({ structure: "deliveries", ext: "taoDeliveryRdf" }))).reason, "area_not_allowed");
   assert.equal((await ask(expert, "/backoffice/taoTests/Tests/editClassProperties", q({ id: MY_TESTS }))).reason, "shared_definitions");
+});
+
+test("results: the page opens, the delivery tree is filtered, and only the expert's own deliveries and results pass", async () => {
+  assert.equal((await ask(expert, "/backoffice/tao/Main/index", q({ structure: "results", ext: "taoOutcomeUi" }))).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/index")).action, "pass");
+  for (const root of RESULT_TREE_ROOTS) {
+    const tree = await ask(expert, "/backoffice/taoOutcomeUi/Results/getOntologyData", q({ classUri: root }));
+    assert.equal(tree.action, "pass");
+    assert.deepEqual(tree.prune, { tree: "results", rootUri: root });
+  }
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: MY_DELIVERY }))).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/viewResult", q({ id: MY_RESULT, classUri: MY_DELIVERY }))).action, "pass");
+  // someone else's delivery, or someone else's result named under the expert's own delivery
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: THEIRS }))).reason, "not_owner");
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/viewResult", q({ id: THEIRS, classUri: MY_DELIVERY }))).reason, "not_owner");
+  // the top folder of the delivery tree is only for listing, not for anything else
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: RESULT_TREE_ROOTS[0] }))).reason, "area_not_allowed");
+});
+
+test("results can be viewed and exported but never deleted", async () => {
+  for (const path of ["/backoffice/taoOutcomeUi/Results/delete", "/backoffice/taoOutcomeUi/Results/deleteResult", "/backoffice/taoOutcomeUi/ResultsMonitoring/removeResults"]) {
+    assert.equal((await ask(expert, path, q({ id: MY_RESULT, classUri: MY_DELIVERY }))).reason, "results_read_only", path);
+  }
 });
 
 test("an expert with no folder yet sees nothing rather than everything", async () => {

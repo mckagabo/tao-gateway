@@ -1,4 +1,4 @@
-import { BLOCKED_ROOTS, WORKSPACE_ROOTS } from "./uri.js";
+import { BLOCKED_ROOTS, RESULT_TREE_ROOTS, WORKSPACE_ROOTS } from "./uri.js";
 import { urisOf } from "./params.js";
 
 // The rules. Given who is asking and what they ask for, decide: let it through, let it through with the top folder
@@ -31,6 +31,9 @@ const EXPERT_ALLOWED = [
   /^\/backoffice\/taoQtiItem\//,
   /^\/backoffice\/taoQtiTestPreviewer\//,
   /^\/backoffice\/taoRevision\//,
+  // Results of the expert's own deliveries (read and export only, see RESULTS_READ_ONLY): which deliveries and which
+  // results are theirs is decided like everything else, by ownership.
+  /^\/backoffice\/taoOutcomeUi\//,
   // Loaders for custom interactions (PCI/PIC) used while editing and previewing questions.
   /^\/backoffice\/qtiItem(?:Pci|Pic)\//,
 ];
@@ -41,7 +44,10 @@ const EXPERT_FORBIDDEN = /PropertiesAuthoring|editClassProperties|addClassProper
 // Calls that list a folder. Without a folder named they would list the top one, so for experts one must be named.
 const NEEDS_TARGET = /\/(?:getOntologyData|RestResource|RestClass)\b|\/taoQtiTest\/Items\//;
 
-const EXPERT_EXTENSIONS = new Set(["tao", "taoCe", "taoTests", "taoItems", "taoQtiTest", "taoQtiItem"]);
+// Results are viewed and exported, never deleted from here: they feed TopBrainer's own marking and scores.
+const RESULTS_READ_ONLY = /\/taoOutcomeUi\/.*(?:delete|remove|purge)/i;
+
+const EXPERT_EXTENSIONS = new Set(["tao", "taoCe", "taoTests", "taoItems", "taoQtiTest", "taoQtiItem", "taoOutcomeUi"]);
 
 const pass = (reason = "ok", replacements = []) => ({ action: "pass", reason, replacements });
 // `detail` says which address (or path) caused the refusal, so the log can show it.
@@ -74,6 +80,7 @@ export async function decide({ request, identity, lookups, localNamespace }) {
 
   if (!EXPERT_ALLOWED.some((rule) => rule.test(path))) return deny("area_not_allowed", path);
   if (EXPERT_FORBIDDEN.test(path)) return deny("shared_definitions");
+  if (RESULTS_READ_ONLY.test(path)) return deny("results_read_only");
   const extension = queryValue(request.query, "ext");
   if (extension && !EXPERT_EXTENSIONS.has(extension)) return deny("area_not_allowed");
 
@@ -86,7 +93,7 @@ export async function decide({ request, identity, lookups, localNamespace }) {
   // A tree listing is answered by TAO as usual and then filtered (see prune.js), because asking for a different top
   // folder changes the shape of the answer and breaks TAO's page.
   const treeListing = /\/getOntologyData\/?$/.test(path);
-  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : null;
+  const treeName = /\/taoTests\//.test(path) ? "tests" : /\/taoItems\//.test(path) ? "items" : /\/taoOutcomeUi\//.test(path) ? "results" : null;
   let prune = null;
 
   const replacements = [];
@@ -104,6 +111,12 @@ export async function decide({ request, identity, lookups, localNamespace }) {
       const workspace = await lookups.workspaceFor(identity.expertId, tree);
       if (!workspace) return deny(`no_workspace_${tree}`);
       replacements.push([uri, workspace]);
+      namesTarget = true;
+      continue;
+    }
+    // The Results tree starts at the deliveries' top folder: listed, then filtered to the expert's own deliveries.
+    if (treeName === "results" && treeListing && RESULT_TREE_ROOTS.includes(uri)) {
+      prune = { tree: "results", rootUri: uri };
       namesTarget = true;
       continue;
     }

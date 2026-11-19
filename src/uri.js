@@ -22,6 +22,13 @@ export const BLOCKED_ROOTS = [
   "http://www.tao.lu/Ontologies/generis.rdf#ClassRole",
 ];
 
+// The top of the Results tree. TAO groups results by delivery, so its listing is filtered to the expert's own deliveries
+// (see policy.js); asking for either of these anywhere else stays refused.
+export const RESULT_TREE_ROOTS = [
+  "http://www.tao.lu/Ontologies/TAODelivery.rdf#AssembledDelivery",
+  "http://www.tao.lu/Ontologies/TAOResult.rdf#DeliveryResult",
+];
+
 export function encodeTaoUri(uri) {
   return uri.replace(/#/g, "_3_").replace(/:\/\//g, "_2_").replace(/\//g, "_1_").replace(/\./g, "_0_").replace(/:/g, "_4_");
 }

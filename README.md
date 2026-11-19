@@ -19,6 +19,17 @@ It sits between nginx and TAO for the back office only. Exam taking never passes
 - A resource is theirs if it is inside one of those folders, or its label carries `[TB:<their id>:…]`.
 - Everything else belongs to admin only.
 
+## Results
+
+Experts can open TAO's Results page for their own deliveries (view and export; anything that deletes is refused).
+
+- The Results tree is listed by TAO and then filtered to the deliveries the expert owns (their label carries `[TB:<id>:…]`).
+- A learner's result belongs to whoever owns its delivery. The link is read from TAO's `results_storage` table
+  (`result_id` -> `delivery`), so the read-only database user needs `SELECT` on it, once:
+  `GRANT SELECT ON results_storage TO tao_gateway_ro;`
+- Deliveries without the tag (older ones) stay admin-only until they are tagged or reassigned.
+- Anything the gateway can't prove is the expert's is refused ("Not available"), so a wrong guess never shows someone else's results.
+
 ## Modes
 
 - `MODE=observe` – forwards everything untouched; logs `would_deny` / `would_pass` (with a folder swap) lines.
