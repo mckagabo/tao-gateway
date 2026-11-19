@@ -119,7 +119,10 @@ test("results: the page opens, the delivery tree is filtered, and only the exper
   // someone else's delivery, or someone else's result named under the expert's own delivery
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: THEIRS }))).reason, "not_owner");
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/viewResult", q({ id: THEIRS, classUri: MY_DELIVERY }))).reason, "not_owner");
-  // the top folder of the delivery tree is only for listing, not for anything else
+  // clicking the top folder opens its page shell; nothing that lists every result under it
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/index", q({ classUri: RESULT_TREE_ROOTS[0] }))).action, "pass");
+  assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/data", q({ classUri: RESULT_TREE_ROOTS[0] }))).reason, "area_not_allowed");
+  // the top folder of the delivery tree is only for listing and its page shell, not for anything else
   assert.equal((await ask(expert, "/backoffice/taoOutcomeUi/Results/getResults", q({ classUri: RESULT_TREE_ROOTS[0] }))).reason, "area_not_allowed");
 });
 

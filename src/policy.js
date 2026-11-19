@@ -118,10 +118,18 @@ export async function decide({ request, identity, lookups, localNamespace }) {
       continue;
     }
     // The Results tree starts at the deliveries' top folder: listed, then filtered to the expert's own deliveries.
-    if (treeName === "results" && treeListing && RESULT_TREE_ROOTS.includes(uri)) {
-      prune = { tree: "results", rootUri: uri };
-      namesTarget = true;
-      continue;
+    if (treeName === "results" && RESULT_TREE_ROOTS.includes(uri)) {
+      if (treeListing) {
+        prune = { tree: "results", rootUri: uri };
+        namesTarget = true;
+        continue;
+      }
+      // Clicking the top folder opens the page shell for it. That page itself lists nothing; the calls that would list
+      // every result under the top folder (results data, exports) still name it and stay refused.
+      if (/\/taoOutcomeUi\/Results\/index\/?$/.test(path)) {
+        namesTarget = true;
+        continue;
+      }
     }
     if (BLOCKED_ROOTS.includes(uri)) return deny("area_not_allowed", uri);
     if (!uri.startsWith(localNamespace)) continue; // TAO's own vocabulary (field names, models): not a resource
